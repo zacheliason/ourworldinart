@@ -16,7 +16,7 @@
         <div id="filter-tab" v-if="show_tab" @click="() => show_tab=false" title="click to minimize">
             <p>Click on individual artpieces (the white circles) to pull up metadata associated with each one. The artworks on the map continuously filter as you type inside the artists box.</p>
             <p>This map contains all pieces of art I could (easily) find on English Wikipedia and Wikiarts. I made it because I kept wishing I knew where to find paintings by Marc Chagall.</p>
-            <p>Needless to say this map isn't comprehensize and should be fact checked!</p>
+            <p>Needless to say this map isn't comprehensive and should be fact checked!</p>
             <p>The color theme for this website is <a target="_blank" href='https://en.wikipedia.org/wiki/International_orange'>International Orange</a>; the type is set in <span class='key'><a target="_blank" href='https://en.wikipedia.org/wiki/Futura_(typeface)'>Futura</a></span> and <span style="font-style:italic"><a target="_blank" href='https://en.wikipedia.org/wiki/Mrs_Eaves'>Mrs Eaves</a></span>.</p>
             <p v-if="out_of_utah" title="">
                 <hr>
@@ -49,9 +49,8 @@ mapboxgl.accessToken = "pk.eyJ1IjoiemNoZSIsImEiOiJjbHdpMGo5ZG4wazBiMmlxcmpoM2ZkO
 
 export default {
     data() {
-      const mobile = this.isMobile()
       return {
-        isMobile: mobile,
+        is_mobile: false,
         artists: [],
         artistsMap: null,
         artworks: null,
@@ -60,7 +59,7 @@ export default {
         current_popup: '',
         out_of_utah: false,
         previousActiveMarker: null,
-        show_tab: !mobile
+        show_tab: true
       };
     },
 
@@ -94,6 +93,9 @@ export default {
     },
 
     mounted() {
+        this.is_mobile = this.isMobile()
+        this.show_tab = !this.is_mobile
+
         if(navigator.userAgent.indexOf('iPhone') > -1 ) {
             document
             .querySelector("[name=viewport]")
@@ -163,8 +165,15 @@ export default {
     },
     methods: {
         isMobile() {
-            return (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) 
-        }, 
+            const userAgent = navigator.userAgent;
+
+            const mobileRegex = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i;
+            const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0 || navigator.msMaxTouchPoints > 0;
+            const isSmallScreen = window.innerWidth <= 800 && window.innerHeight <= 600;
+
+            return mobileRegex.test(userAgent) && ( isTouchDevice || isSmallScreen);
+        },
+
 
         // This function finds overlapping points and clusters them in optimized concentric circles about the origin
         jitter(points) {
@@ -330,8 +339,8 @@ export default {
                 // style: "mapbox://styles/mapbox/streets-v12"
 
                 // Different starting points for mobile / desktop
-                center: this.isMobile ? [-73.9639614009125, 40.78248611767528] : [2.326929220445182, 48.86008251391034],
-                zoom: this.isMobile ? 14 : 15.6,
+                center: this.is_mobile ? [-73.9639614009125, 40.78248611767528] : [2.326929220445182, 48.86008251391034],
+                zoom: this.is_mobile ? 14 : 15.6,
             });
 
             map.on('load', () => {
@@ -403,11 +412,10 @@ export default {
             map.on('click', 'unclustered-point', (e) => {
                 const feature = e.features[0];
 
-
                 const setPopup = async () => {
                     const delay = ms => new Promise(res => setTimeout(res, ms));
-                    if (this.isMobile) {
-                        await delay(1000)
+                    if (this.is_mobile) {
+                        await delay(500)
                     }
                     this.current_popup = this.generatePopupHTML(feature.properties)
                 }
