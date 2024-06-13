@@ -16,8 +16,7 @@
         <div id="filter-tab" v-if="show_tab" @click="() => show_tab=false" title="click to minimize">
             <p>Click on individual artpieces (the white circles) to pull up metadata associated with each one. The artworks on the map continuously filter as you type inside the artists box.</p>
             <p>This map contains all pieces of art I could (easily) find on English Wikipedia and Wikiarts. I made it because I kept wishing I knew where to find paintings by Marc Chagall.</p>
-            <p>Needless to say this map isn't comprehensive and should be fact checked!</p>
-            <p>The color theme for this website is <a target="_blank" href='https://en.wikipedia.org/wiki/International_orange'>International Orange</a>; the type is set in <span class='key'><a target="_blank" href='https://en.wikipedia.org/wiki/Futura_(typeface)'>Futura</a></span> and <span style="font-style:italic"><a target="_blank" href='https://en.wikipedia.org/wiki/Mrs_Eaves'>Mrs Eaves</a></span>.</p>
+            <p>The color theme for this website is <a target="_blank" href='https://en.wikipedia.org/wiki/International_orange'>International Orange</a>; the type is set in <span class='key' style='padding-right:0;'><a target="_blank" href='https://en.wikipedia.org/wiki/Futura_(typeface)'>Futura</a></span> and <span style="font-style:italic"><a target="_blank" href='https://en.wikipedia.org/wiki/Mrs_Eaves'>Mrs Eaves</a></span>.</p>
             <p v-if="out_of_utah" title="">
                 <hr>
                 <p>The costs of hosting this website are low (but not zero) and I am a student! Tip if you like.</p>
@@ -485,7 +484,7 @@ export default {
             if ('image' in artwork) {
                 html += `<div style='text-align:center;'><img class='artwork-image' src=${artwork.image}></div>`
             } else{
-                html += `<div class='spacer'></div>`
+                html += `<div style='text-align:center;'><div class="image-not-found">no image found</div></div>`
             }
 
             html += `<h2 class="artwork-title">${artwork.title}</h2>`
@@ -570,6 +569,7 @@ export default {
 body {
     padding: 0;
     margin: 0;
+    font-size: 1em !important;
 }
 
 img {
@@ -623,7 +623,7 @@ img {
     cursor: pointer;
     max-width: 310px;
     overflow-y: scroll;
-    font-size: 1.2em;
+    font-size: 1.1em;
     font-family: mrs-eaves, 'serif';
     text-transform: unset;
     background-color: rgba(255,255,255,1);
@@ -722,6 +722,7 @@ input {
     font-weight: 600;
     text-align: center;
     font-family: "mrs-eaves-roman-petite-caps", serif;
+    font-size: 1.1em;
     text-transform: uppercase;
     opacity: .6;
 }
@@ -812,12 +813,30 @@ body, html {
             padding: 0;
             height: 100%;
             overflow: hidden; /* Prevents the body from scrolling */
-        }
+}
 
 .spacer {
     height: 100px;
 }
 
+.image-not-found {
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    width: 100%;
+    height: 150px;
+    border: 3px solid #aaa;
+    color: #aaa;
+    background-color: #f3f3f3;
+    margin-bottom: 1em;
+
+    font-family: 'futura-pt', sans-serif;
+    text-transform: lowercase;
+    font-size: 1.2em;
+    font-weight: bolder;
+}
 
 @media (max-width: 600px) {
     .x {
