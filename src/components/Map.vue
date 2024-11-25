@@ -6,15 +6,39 @@
     </div>
     <div id="filters">
         <div id="filter-box" :class="{ 'rounded-right-corner': !show_tab }">
-          <label></label>
-          <!-- <label>Filter by artist: </label> -->
-          <input style='width:calc(100% - 1em)' type="text" list='artistList' v-model="artistSearchQuery" placeholder="Filter by artist...">
-          <datalist id="artistList">
-            <option v-for="artist in filteredArtists" :key="artist" :value="artist">{{ artist }}</option>
-          </datalist>
+            <!-- Desktop Input - Only shown on desktop -->
+            <input 
+                v-if="!is_mobile"
+                style='width:calc(100% - 1em)' 
+                type="text" 
+                list='artistList' 
+                v-model="desktopSearchQuery"
+                @input="handleDesktopInput"
+                placeholder="Filter by artist..."
+                class="desktop-input"
+            >
+            
+            <!-- Mobile Input - Only shown on mobile -->
+            <input 
+                v-if="is_mobile"
+                style='width:calc(100% - 1em)' 
+                type="text" 
+                list='artistList' 
+                v-model="mobileSearchQuery"
+                @input="handleMobileInput"
+                @keyup="handleMobileEnter"
+                placeholder="Filter by artist (press Enter to search)"
+                class="mobile-input"
+            >
+            
+            <datalist id="artistList">
+                <option v-for="artist in filteredArtists" :key="artist" :value="artist">
+                    {{ artist }}
+                </option>
+            </datalist>
         </div>
         <div id="filter-tab" v-if="show_tab" @click="() => show_tab=false" title="click to minimize">
-            <p>Click on individual artpieces (the white circles) to pull up metadata associated with each one. The artworks on the map continuously filter as you type inside the artists box.</p>
+            <p>Click on individual artpieces (the white circles) to pull up metadata associated with each one. The artworks on the map continually filter as you type inside the artists box.</p>
             <p>This map contains all pieces of art I could (easily) find on English Wikipedia and Wikiarts. I made it because I kept wishing I knew where to find paintings by Marc Chagall.</p>
             <p>The color theme for this website is <a target="_blank" href='https://en.wikipedia.org/wiki/International_orange'>International Orange</a>; the type is set in <span class='key' style='padding-right:0;'><a target="_blank" href='https://en.wikipedia.org/wiki/Futura_(typeface)'>Futura</a></span> and <span style="font-style:italic"><a target="_blank" href='https://en.wikipedia.org/wiki/Mrs_Eaves'>Mrs Eaves</a></span>.</p>
             <p v-if="out_of_utah" title="">
@@ -48,50 +72,81 @@ mapboxgl.accessToken = "pk.eyJ1IjoiemNoZSIsImEiOiJjbHdpMGo5ZG4wazBiMmlxcmpoM2ZkO
 
 export default {
     data() {
-      return {
-        is_mobile: false,
-        artists: [],
-        artistsMap: null,
-        artworks: null,
-        artistSearchQuery: '',
-        map: null,
-        current_popup: '',
-        out_of_utah: false,
-        previousActiveMarker: null,
-        show_tab: true
-      };
+        return {
+            is_mobile: false,
+            artists: [],
+            artistsMap: null,
+            artworks: null,
+            desktopSearchQuery: '',
+            mobileSearchQuery: '',
+            debouncedSearchQuery: '',
+            map: null,
+            current_popup: '',
+            out_of_utah: false,
+            previousActiveMarker: null,
+            show_tab: true,
+            debounceTimeout: null,
+            isTyping: false,
+            updateMapTimeout: null,
+            cachedGeojson: null,
+            initMapLocation: null,
+        };
     },
 
     computed: {
-      filteredArtists() {
-        return this.artists.filter(artist => {
-            return artist.toLowerCase().includes(this.artistSearchQuery.toLowerCase());
-        }).sort();
+        filteredArtists() {
+            // Use the appropriate search query based on device
+            const query = (this.is_mobile ? this.mobileSearchQuery : this.desktopSearchQuery).toLowerCase();
+            return this.artists
+                .filter(artist => artist.toLowerCase().includes(query))
+                .slice(0, 10)
+                .sort();
         },
 
         filteredArtworks() {
-            if (!this.artworks) {
-                return [];
+            if (!this.artworks || this.isTyping) {
+                return this.cachedGeojson || [];
             }
 
-            const searchQuery = this.artistSearchQuery.trim().toLowerCase();
+            const searchQuery = this.debouncedSearchQuery.trim().toLowerCase();
 
             if (searchQuery === '') {
-                return this.to_geojson(this.jitter(this.join_location(this.artworks, this.locations)))
+                const result = this.to_geojson(
+                    this.jitter(this.join_location(this.artworks, this.locations))
+                );
+                this.cachedGeojson = result;
+                return result;
             }
 
-            let artworks = this.artworks.filter((artwork) => {
-                return artwork.artist.toLowerCase().includes(searchQuery);
-            });
+            const matchingArtworks = this.artworks.filter((artwork) => 
+                artwork.artist.toLowerCase().includes(searchQuery)
+            );
 
-            artworks = this.join_location(artworks, this.locations)
-            artworks = this.jitter(artworks)
-
-            return this.to_geojson(artworks)
+            const result = this.to_geojson(
+                this.jitter(this.join_location(matchingArtworks, this.locations))
+            );
+            this.cachedGeojson = result;
+            return result;
         },
     },
 
     mounted() {
+        this.is_mobile = this.isMobile();
+        this.show_tab = !this.is_mobile;
+
+        // Initialize debouncedSearchQuery
+        this.debouncedSearchQuery = this.artistSearchQuery;
+        
+        // Rest of your mounted logic remains the same
+        this.is_mobile = this.isMobile()
+        this.show_tab = !this.is_mobile
+
+        if(navigator.userAgent.indexOf('iPhone') > -1 ) {
+            document
+            .querySelector("[name=viewport]")
+            .setAttribute("content","width=device-width, initial-scale=1, maximum-scale=1");
+        }
+
         this.is_mobile = this.isMobile()
         this.show_tab = !this.is_mobile
 
@@ -124,6 +179,10 @@ export default {
                     // comment back in for payment tab
                     this.out_of_utah = false;
                 }
+                // Save latitude and longitude from IP address
+                this.initMapLocation = [data.lat, data.lon];
+                console.log(this.initMapLocation);
+                console.log(data.lon);
             } catch (error) {
                 // console.log(error.message)
             }
@@ -163,6 +222,47 @@ export default {
             });
     },
     methods: {
+        handleDesktopInput(event) {
+            this.desktopSearchQuery = event.target.value;
+            this.isTyping = true;
+            
+            if (this.debounceTimeout) clearTimeout(this.debounceTimeout);
+            if (this.updateMapTimeout) clearTimeout(this.updateMapTimeout);
+            
+            this.debounceTimeout = setTimeout(() => {
+                this.debouncedSearchQuery = this.desktopSearchQuery;
+                this.isTyping = false;
+                
+                this.updateMapTimeout = setTimeout(() => {
+                    this.updateMap();
+                }, 0);
+            }, 150);
+        },
+
+        handleMobileInput(event) {
+            this.mobileSearchQuery = event.target.value;
+            this.isTyping = true;
+        },
+
+        handleMobileEnter(event) {
+            if (event.key === 'Enter') {
+                this.debouncedSearchQuery = this.mobileSearchQuery;
+                this.isTyping = false;
+                this.updateMap();
+                event.target.blur();
+            }
+        },
+
+        debounceSearch(value) {
+            if (this.debounceTimeout) {
+                clearTimeout(this.debounceTimeout);
+            }
+            
+            this.debounceTimeout = setTimeout(() => {
+                this.debouncedSearchQuery = value;
+            }, this.is_mobile ? 500 : 200); // Longer delay for mobile
+        },
+
         isMobile() {
             const userAgent = navigator.userAgent;
 
@@ -233,7 +333,7 @@ export default {
                 numRings = ringSizes.length;
                 const diff = numPoints - rt;
 
-                r = 1.5; // This can be adjusted based on the required exponential growth rate
+                r = 1.5;
 
                 for (let i = 1; i < numRings; i++) {
                     subdivisions.push(subdivisions[subdivisions.length - 1] * r);
@@ -254,7 +354,7 @@ export default {
                 subdivisions = [numPoints - totalCountsWithRing[0]];
             }
 
-            r = 1;
+            r = 1
             pointsTotalInCircle = Math.floor(2 * Math.PI * r);
 
             if (subdivisions.length > 0) {
@@ -262,7 +362,7 @@ export default {
             }
 
             // scales the transformation down appropriately
-            const scalingFactor = 0.0002;
+            const scalingFactor = this.isMobile() ? .0003 : .0002;
             // corrects the skew in shape from applying a circular pattern to a sphere
             const curvatureCorrection = Math.cos((xStart * Math.PI) / 180);
 
@@ -328,29 +428,87 @@ export default {
             });
         },
 
-        // set up map
+        handleKeyPress(event) {
+            if (this.is_mobile) {
+                if (event.key === 'Enter') {
+                    // On mobile, only update on Enter key
+                    this.debouncedSearchQuery = this.artistSearchQuery;
+                    this.isTyping = false;
+                    this.updateMap();
+                    // Optionally blur the input to hide mobile keyboard
+                    event.target.blur();
+                }
+            }
+        },
+
+        handleInput(event) {
+            this.artistSearchQuery = event.target.value;
+            
+            if (this.is_mobile) {
+                // On mobile, just store the value but don't update map
+                this.isTyping = true;
+                if (this.debounceTimeout) clearTimeout(this.debounceTimeout);
+                if (this.updateMapTimeout) clearTimeout(this.updateMapTimeout);
+            } else {
+                // On desktop, keep the existing debounce behavior
+                this.isTyping = true;
+                
+                if (this.debounceTimeout) clearTimeout(this.debounceTimeout);
+                if (this.updateMapTimeout) clearTimeout(this.updateMapTimeout);
+                
+                this.debounceTimeout = setTimeout(() => {
+                    this.debouncedSearchQuery = this.artistSearchQuery;
+                    this.isTyping = false;
+                    
+                    this.updateMapTimeout = setTimeout(() => {
+                        this.updateMap();
+                    }, 0);
+                }, 150);
+            }
+        },
+
+        updateMap() {
+            if (!this.map) return;
+            
+            try {
+                requestAnimationFrame(() => {
+                    this.map.getSource('markers').setData(this.filteredArtworks);
+                });
+            } catch(e) {
+                console.error('Map update failed:', e);
+            }
+        },
+
         initMap(geojson) {
             const map = new mapboxgl.Map({
                 container: this.$refs.mapContainer,
-
-                // darkmode
                 style: "mapbox://styles/mapbox/dark-v11?optimize=true",
-                // style: "mapbox://styles/mapbox/streets-v12"
-
-                // Different starting points for mobile / desktop
                 center: this.is_mobile ? [-73.9639614009125, 40.78248611767528] : [2.326929220445182, 48.86008251391034],
                 zoom: this.is_mobile ? 14 : 15.6,
+                maxZoom: 18,
+                preserveDrawingBuffer: false // Optimize performance
             });
 
             map.on('load', () => {
+                // Optimize clustering for mobile
+                const clusterConfig = this.is_mobile ? {
+                    clusterMaxZoom: 14
+                } : {
+                    clusterMaxZoom: 14
+                };
+                const clusterSize = this.is_mobile ? 8 : 6;
+
+                console.log('clusterConfig', clusterConfig);
+
                 map.addSource('markers', {
                     type: 'geojson',
                     data: geojson,
                     cluster: true,
-                    clusterMaxZoom: 14,
-                    clusterRadius: 50
+                    ...clusterConfig,
+                    generateId: true // Optimize for state updates
                 });
 
+                // Optimize layer rendering
                 map.addLayer({
                     id: 'clusters',
                     type: 'circle',
@@ -358,26 +516,23 @@ export default {
                     filter: ['has', 'point_count'],
                     paint: {
                         'circle-color': [
-                            'interpolate',
-                            ['linear'],
+                            'step',
                             ['get', 'point_count'],
-                            0, '#fffa6b',
-                            2000, '#FF4F00' 
+                            '#fffa6b',
+                            100, '#FF4F00'
                         ],
                         'circle-radius': [
-                            'interpolate',
-                            ['linear'],
+                            'step',
                             ['get', 'point_count'],
-                            2, 15,
-                            100, 25,
-                            750, 26,
-                            1000, 27,
-                            1500, 28,
+                            15,
+                            100, 20,
+                            750, 25,
                             2000, 30
-                        ],
+                        ]
                     }
                 });
 
+                // Simplified cluster count layer
                 map.addLayer({
                     id: 'cluster-count',
                     type: 'symbol',
@@ -385,11 +540,12 @@ export default {
                     filter: ['has', 'point_count'],
                     layout: {
                         'text-field': '{point_count_abbreviated}',
-                        'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Bold'],
+                        'text-font': ['DIN Offc Pro Medium'],
                         'text-size': 12
                     }
                 });
 
+                // Optimize unclustered points
                 map.addLayer({
                     id: 'unclustered-point',
                     type: 'circle',
@@ -400,83 +556,81 @@ export default {
                             'case',
                             ['boolean', ['feature-state', 'active'], false],
                             '#FF4F00', 
-                            'white' // Color for inactive markers
-                            ],
-                        'circle-radius': 6,
+                            'white'
+                        ],
+                        'circle-radius': clusterSize
                     }
-                }, 'clusters');
-            });
-
-
-            map.on('click', 'unclustered-point', (e) => {
-                const feature = e.features[0];
-
-                const setPopup = async () => {
-                    const delay = ms => new Promise(res => setTimeout(res, ms));
-                    if (this.is_mobile) {
-                        await delay(500)
-                    }
-                    this.current_popup = this.generatePopupHTML(feature.properties)
-                }
-
-                setPopup()
-
-                const coordinates = e.features[0].geometry.coordinates;
-                    
-                map.easeTo({
-                    center: coordinates, 
-                    zoom: 16, 
-                    duration: 1000 
                 });
-
-                const sourceId = feature.source;
-                const featureId = feature.id;
-
-                map.setFeatureState(
-                    { source: sourceId, id: featureId },
-                    { active: true }
-                );
-
-                if (this.previousActiveMarker !== null && this.previousActiveMarker.id != featureId) {
-                    map.removeFeatureState(this.previousActiveMarker, 'active');
-                }
-
-                this.previousActiveMarker = { source: sourceId, id: featureId };
             });
 
-            map.on('click', 'clusters', function (e) {
-                var features = e.features;
-                var clusterId = features[0].properties.cluster_id;
-                map.getSource('markers').getClusterExpansionZoom(clusterId, function (err, zoom) {
-                    if (err)
-                        return;
-
-                    map.easeTo({
-                        center: features[0].geometry.coordinates,
-                        zoom: zoom
+            // Optimize event handlers
+            const handleClusterClick = (e) => {
+                const features = e.features;
+                const clusterId = features[0].properties.cluster_id;
+                map.getSource('markers').getClusterExpansionZoom(clusterId, (err, zoom) => {
+                    if (err) return;
+                    
+                    requestAnimationFrame(() => {
+                        map.easeTo({
+                            center: features[0].geometry.coordinates,
+                            zoom: zoom
+                        });
                     });
                 });
-            });
+            };
 
-            map.on('mouseenter', 'unclustered-point', function () {
-                map.getCanvas().style.cursor = 'pointer';
-            });
+            // Add optimized event listeners
+            map.on('click', 'clusters', handleClusterClick);
+            map.on('click', 'unclustered-point', this.handlePointClick);
 
-            map.on('mouseleave', 'unclustered-point', function () {
-                map.getCanvas().style.cursor = '';
-            });
-
-
-            map.on('mouseenter', 'clusters', function () {
-                map.getCanvas().style.cursor = 'pointer';
-            });
-
-            map.on('mouseleave', 'clusters', function () {
-                map.getCanvas().style.cursor = '';
+            // Use cursor property for pointer events
+            ['clusters', 'unclustered-point'].forEach(layer => {
+                map.on('mouseenter', layer, () => {
+                    map.getCanvas().style.cursor = 'pointer';
+                });
+                map.on('mouseleave', layer, () => {
+                    map.getCanvas().style.cursor = '';
+                });
             });
 
             this.map = map;
         },
+
+        handlePointClick(e) {
+            const feature = e.features[0];
+            const coordinates = feature.geometry.coordinates;
+            
+            // Defer popup creation
+            requestAnimationFrame(async () => {
+                const delay = ms => new Promise(res => setTimeout(res, ms));
+                if (this.is_mobile) {
+                    await delay(300);
+                }
+                this.current_popup = this.generatePopupHTML(feature.properties);
+                
+                this.map.easeTo({
+                    center: coordinates,
+                    zoom: 16,
+                    duration: 1000
+                });
+
+                // Update feature state
+                if (this.previousActiveMarker) {
+                    this.map.removeFeatureState(this.previousActiveMarker, 'active');
+                }
+                
+                this.map.setFeatureState(
+                    { source: feature.source, id: feature.id },
+                    { active: true }
+                );
+                
+                this.previousActiveMarker = { 
+                    source: feature.source, 
+                    id: feature.id 
+                };
+            });
+        },
+
 
         generatePopupHTML(artwork) {
             let html = "<div style='width:100%;'><div class='m-spacer'></div><div class='m-spacer'></div>"
@@ -542,25 +696,32 @@ export default {
     },
 
     watch: {
+        // Update the artistSearchQuery watcher to use debounce
+        artistSearchQuery(newValue) {
+            if (!this.is_mobile) {
+                this.debounceSearch(newValue);
+            }
+        },
+
         filteredArtworks(geojson) {
             if (this.map) {
-                try{
-                    this.map.getSource('markers').setData(
-                        geojson
-                    );
+                try {
+                    this.map.getSource('markers').setData(geojson);
                 } catch(e) {
-                    // console.log(e)
+                    console.error('Error updating map source:', e);
                 }
-            } else {
-                this.initMap(geojson);
             }
         },
     },
+
     unmounted() {
+        if (this.debounceTimeout) {
+            clearTimeout(this.debounceTimeout);
+        }
         this.map.remove();
         this.map = null;
     }
-};
+}
 
 </script>
 
@@ -668,7 +829,7 @@ img {
     width: 40px;
     height: 40px; 
     display: inline-block;
-    float: right;
+    /* float: right*/
     margin-bottom: 1em;
     z-index: 9999;
     cursor: pointer;
@@ -825,7 +986,7 @@ body, html {
     align-items: center;
     justify-content: center;
 
-    width: 100%;
+    width: calc(100% - 6px);
     height: 150px;
     border: 3px solid #aaa;
     color: #aaa;
@@ -838,6 +999,18 @@ body, html {
     font-weight: bolder;
 }
 
+.desktop-input,
+.mobile-input {
+    background-color: rgba(200,200,200,.5);
+    color: white;
+    border: 0;
+    border-radius: 0;
+    padding: .5em .5em .4em .5em;
+    font-size: 16px;
+}
+
+
+
 @media (max-width: 600px) {
     .x {
         position: fixed;
@@ -846,7 +1019,7 @@ body, html {
         background-color: white;
     }
 
-    img {
+    img, .image-not-found {
         margin-top: 10vh;
     }
 
@@ -913,8 +1086,20 @@ body, html {
         color: white;
         opacity:.7;
     }
+
+    .mobile-input {
+        margin: 0;
+        width: calc(100vw - 4em);
+        border: 0;
+        border-radius: 0;
+        background-color: rgba(200,200,200,1);
+        color: white;
+    }
+
+    .mobile-input::placeholder {
+        color: white;
+        opacity: .7;
+    }
+
 }
-
-
-
 </style>
