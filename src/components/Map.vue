@@ -80,6 +80,7 @@ export default {
             desktopSearchQuery: '',
             mobileSearchQuery: '',
             debouncedSearchQuery: '',
+            artistSearchQuery: '',
             map: null,
             current_popup: '',
             out_of_utah: false,
@@ -683,6 +684,8 @@ export default {
                 } else {
                     html += `<div class='value'><span class='key'>artwork source: </span><a class='link-value' target='_blank' href="https://en.wikipedia.org/wiki/List_of_works_by_${artwork.artist.replaceAll(' ', '_')}">list of works by ${artwork.artist.toLowerCase()}</a></div>`
                 }
+            } else if (use_date == -3) {
+                html += `<div class='value'><span class='key'>artwork source: </span><a class='link-value' target='_blank' href="https://github.com/NationalGalleryOfArt/opendata">the national gallery of art open data project</a></div>`
             }
 
             if (this.artistsMap[artwork.artist]) {
